@@ -1,50 +1,24 @@
 ﻿using MelonLoader;
 using Harmony;
-
-using Assets.Scripts.Unity.UI_New.InGame;
-
-using Assets.Scripts.Models.Towers;
-using Assets.Scripts.Unity;
-using Assets.Scripts.Utils;
 using System;
-using System.Text.RegularExpressions;
-using System.IO;
-using Assets.Main.Scenes;
 using System.Linq;
-using Assets.Scripts.Models.Towers.Behaviors.Attack;
-using Assets.Scripts.Models.Towers.Behaviors.Attack.Behaviors;
-using Assets.Scripts.Models.Towers.Behaviors;
-using Assets.Scripts.Models.Bloons.Behaviors;
-using Assets.Scripts.Models.Towers.Projectiles.Behaviors;
-using System.Collections.Generic;
-using Assets.Scripts.Models;
-using Assets.Scripts.Models.Towers.Projectiles;
-using Assets.Scripts.Models.Towers.Behaviors.Emissions;
-using Assets.Scripts.Models.Towers.Behaviors.Abilities;
-using Assets.Scripts.Simulation.Track;
-using Assets.Scripts.Unity.Bridge;
-using Assets.Scripts.Simulation.Towers;
 using UnhollowerBaseLib;
 using Assets.Scripts.Simulation.Input;
 using Assets.Scripts.Models.TowerSets;
-using Assets.Scripts.Models.Powers;
-using Assets.Scripts.Models.Profile;
 using NKHook6.Api.Events;
-using NKHook6;
-using Assets.Scripts.Models.Bloons;
-using NKHook6.Api.Extensions;
-using static NKHook6.Api.Events._Bloons.BloonEvents;
 using Logger = NKHook6.Logger;
-using NKHook6.Api;
+using BloonsTD6_Mod_Helper.Extensions;
+using Assets.Scripts.Unity.UI_New.InGame.RightMenu;
+using Assets.Scripts.Unity.UI_New.InGame.StoreMenu;
 
 namespace BTD6Randomizer
 {
     public class Main : MelonMod
     {
         static System.Random random = new System.Random();
-        private static TowerInventory inventory = null;
         private static Settings settings = null;
         private static string[] towerNames = new string[] {};
+        private static Il2CppArrayBase<TowerPurchaseButton> towerButtons;
 
         public override void OnApplicationStart()
         {
@@ -55,12 +29,6 @@ namespace BTD6Randomizer
             settings = settings.Load<Settings>();
             settings.Save(settings);
             Logger.Log("BTD6Randomizer has finished loading");
-        }
-
-        [EventAttribute("RoundStartEvent")]
-        public static void RoundStart(NKHook6.Api.Events._Simulation.SimulationEvents.RoundStartEvent e)
-        {
-            Main.inventory = e.simulation.GetTowerInventory(-1);
         }
 
         [EventAttribute("RoundEndEvent")]
@@ -85,11 +53,22 @@ namespace BTD6Randomizer
 
         public static void RerollTowers()
         {
-            if (Main.inventory != null)
+            if(Main.towerButtons == null)
             {
-                Il2CppStringArray towers = new Il2CppStringArray(towerNames.OrderBy(x => random.Next()).Skip(Math.Max(Math.Min(settings.NumberOfRandomTowers, towerNames.Length), 0)).ToArray());
-                Main.inventory.towerDiscounts.Clear();
-                Main.inventory.AddTowerDiscount("Restriction", towers, 99999, 0, -1000000);
+                Main.towerButtons = ShopMenu.instance.towerButtons.GetComponentsInChildren<Assets.Scripts.Unity.UI_New.InGame.StoreMenu.TowerPurchaseButton>();
+            }
+
+            Il2CppStringArray enabledTowers = new Il2CppStringArray(towerNames.OrderBy(x => random.Next()).Take(Math.Max(Math.Min(settings.NumberOfRandomTowers, towerNames.Length), 0)).ToArray());
+            foreach (var purchaseButton in Main.towerButtons)
+            {
+                if(enabledTowers.Contains(purchaseButton.baseTowerModel.name))
+                {
+                    purchaseButton.transform.parent.gameObject.SetActive(true);
+                }
+                else
+                {
+                    purchaseButton.transform.parent.gameObject.SetActive(false);
+                }
             }
         }
 
@@ -99,6 +78,8 @@ namespace BTD6Randomizer
             [HarmonyPrefix]
             public static bool Prefix(ref Il2CppSystem.Collections.Generic.List<TowerDetailsModel> allTowersInTheGame)
             {
+                Main.towerButtons = null;
+
                 Main.towerNames = allTowersInTheGame.ToArray().Where(x => x.name.Contains("ShopTowerDetailsModel")).Select(x => x.name.Replace("ShopTowerDetailsModel_", "")).ToArray();
 
                 return true;
