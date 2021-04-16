@@ -1,13 +1,6 @@
-﻿using NKHook6.Api;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace BTD6Randomizer
+﻿namespace BTD6Randomizer
 {
-    public class Settings : ModSettings
+    public class Settings
     {
         public int NumberOfRandomTowers { get; set; } = 2;
         public bool RerollAfterBuild { get; set; } = true;

@@ -5,11 +5,12 @@ using System.Linq;
 using UnhollowerBaseLib;
 using Assets.Scripts.Simulation.Input;
 using Assets.Scripts.Models.TowerSets;
-using NKHook6.Api.Events;
-using Logger = NKHook6.Logger;
-using BloonsTD6_Mod_Helper.Extensions;
 using Assets.Scripts.Unity.UI_New.InGame.RightMenu;
 using Assets.Scripts.Unity.UI_New.InGame.StoreMenu;
+using Assets.Scripts.Simulation.Towers;
+using Assets.Scripts.Simulation.Objects;
+using Assets.Scripts.Models;
+using Assets.Scripts.Simulation;
 
 namespace BTD6Randomizer
 {
@@ -17,37 +18,45 @@ namespace BTD6Randomizer
     {
         static System.Random random = new System.Random();
         private static Settings settings = null;
-        private static string[] towerNames = new string[] {};
+        private static string[] towerNames = new string[] { };
         private static Il2CppArrayBase<TowerPurchaseButton> towerButtons;
 
         public override void OnApplicationStart()
         {
             base.OnApplicationStart();
 
-            EventRegistry.instance.listen(typeof(Main));
+            HarmonyInstance.Create("ScallyGames.BTD6Randomizer").PatchAll();
+
             settings = new Settings();
-            settings = settings.Load<Settings>();
-            settings.Save(settings);
-            Logger.Log("BTD6Randomizer has finished loading");
+
+            MelonLogger.Msg("BTD6Randomizer has finished loading");
         }
 
-        [EventAttribute("RoundEndEvent")]
-        public static void RoundEnd(NKHook6.Api.Events._Simulation.SimulationEvents.RoundEndEvent e)
+        [HarmonyPatch(typeof(Simulation), "OnRoundEnd")]
+        class SimulationRoundEnd_Patch
         {
-            if(settings.RerollAfterWave)
+            [HarmonyPostfix]
+            public static void Postfix()
             {
-                RerollTowers();
+                if (settings.RerollAfterWave)
+                {
+                    RerollTowers();
+                }
             }
         }
 
-        [EventAttribute("TowerCreatedEvent")]
-        public static void TowerBuilt(NKHook6.Api.Events._Towers.TowerEvents.CreatedEvent e)
+        [HarmonyPatch(typeof(Tower), "Initialise")]
+        class TowerInitialise_Patch
         {
-            if (!towerNames.Contains(e.model.name)) return; // ignore summoned towers   
-
-            if(settings.RerollAfterBuild)
+            [HarmonyPostfix]
+            public static void Postfix(ref Tower __instance, ref Entity target, ref Model modelToUse)
             {
-                RerollTowers();
+                if (!towerNames.Contains(__instance.towerModel.name)) return; // ignore summoned towers   
+
+                if (settings.RerollAfterBuild)
+                {
+                    RerollTowers();
+                }
             }
         }
 
