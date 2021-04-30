@@ -1,73 +1,114 @@
 ﻿using MelonLoader;
-using Harmony;
 using System;
 using System.Linq;
 using UnhollowerBaseLib;
 using Assets.Scripts.Simulation.Input;
-using Assets.Scripts.Models.TowerSets;
 using Assets.Scripts.Unity.UI_New.InGame.RightMenu;
 using Assets.Scripts.Unity.UI_New.InGame.StoreMenu;
 using Assets.Scripts.Simulation.Towers;
 using Assets.Scripts.Simulation.Objects;
 using Assets.Scripts.Models;
-using Assets.Scripts.Simulation;
+using BloonsTD6_Mod_Helper;
+using BloonsTD6_Mod_Helper.Extensions;
+using Assets.Scripts.Unity.UI_New.InGame;
+using UnityEngine;
+using System.Text.RegularExpressions;
 
 namespace BTD6Randomizer
 {
-    public class Main : MelonMod
+    public class Main : BloonsTD6Mod
     {
+        // TODO: Fix farm being rollable in CHIMPS
+        // TODO: Include heroes in rolls with settings
+        // TODO: Fix settings
+        // TODO: Remove water towers in non-water maps
+
         static System.Random random = new System.Random();
-        private static Settings settings = null;
+        const string preferencesCategoryIdentifier = "BTD6Randomizer";
         private static string[] towerNames = new string[] { };
+        private static string[] heroNames = new string[] { };
         private static Il2CppArrayBase<TowerPurchaseButton> towerButtons;
+        private static TowerInventory currentInventory;
 
         public override void OnApplicationStart()
         {
             base.OnApplicationStart();
 
-            HarmonyInstance.Create("ScallyGames.BTD6Randomizer").PatchAll();
+            MelonLogger.Msg("BTD6Randomizer mod loaded");
 
-            settings = new Settings();
+            MelonPreferences.CreateCategory(preferencesCategoryIdentifier, "BTD6 Randomizer Settings");
 
-            MelonLogger.Msg("BTD6Randomizer has finished loading");
+            MelonPreferences.CreateEntry(preferencesCategoryIdentifier, "NumberOfRandomTowers", 2, "Number of Random Towers");
+            MelonPreferences.CreateEntry(preferencesCategoryIdentifier, "RerollAfterBuild", true, "Reroll After Build");
+            MelonPreferences.CreateEntry(preferencesCategoryIdentifier, "RerollAfterWave", false, "Reroll After Wave");
+            MelonPreferences.CreateEntry(preferencesCategoryIdentifier, "RerollOnStart", false, "Reroll On Start");
         }
 
-        [HarmonyPatch(typeof(Simulation), "OnRoundEnd")]
-        class SimulationRoundEnd_Patch
+        public override void OnUpdate()
         {
-            [HarmonyPostfix]
-            public static void Postfix()
+            if(MelonPreferences.GetEntryValue<bool>(preferencesCategoryIdentifier, "RerollOnStart"))
             {
-                if (settings.RerollAfterWave)
+                try
                 {
-                    RerollTowers();
+                    if (towerButtons == null || towerButtons.Length == 0 || currentInventory != InGame.instance.GetTowerInventory())
+                    {
+                        RerollTowers();
+                    }
                 }
+                catch (Exception) { }
             }
         }
 
-        [HarmonyPatch(typeof(Tower), "Initialise")]
-        class TowerInitialise_Patch
+        public override void OnKeyDown(KeyCode keyCode)
         {
-            [HarmonyPostfix]
-            public static void Postfix(ref Tower __instance, ref Entity target, ref Model modelToUse)
-            {
-                if (!towerNames.Contains(__instance.towerModel.name)) return; // ignore summoned towers   
+            base.OnKeyDown(keyCode);
 
-                if (settings.RerollAfterBuild)
-                {
-                    RerollTowers();
-                }
+            if(keyCode == KeyCode.F9)
+            {
+                RerollTowers();
+            }
+        }
+
+        public override void OnRoundEnd()
+        {
+            if (MelonPreferences.GetEntryValue<bool>(preferencesCategoryIdentifier, "RerollAfterWave"))
+            {
+                RerollTowers();
+            }
+        }
+
+        public override void OnTowerCreated(Tower tower, Entity target, Model modelToUse)
+        {
+            if(towerNames.Length == 0)
+            {
+                SetTowerNames();
+                heroNames = InGame.instance.GetGameModel().GetAllTowerDetails().ToArray().Where(x => x.name.Contains("HeroDetailsModel")).Select(x => x.name.Replace("HeroDetailsModel_", "")).ToArray();
+            }
+
+            base.OnTowerCreated(tower, target, modelToUse);
+
+            if (!heroNames.Contains(tower.model.name) && !towerNames.Contains(tower.towerModel.name)) return; // ignore summoned towers   
+
+            if (MelonPreferences.GetEntryValue<bool>(preferencesCategoryIdentifier, "RerollAfterBuild"))
+            {
+                RerollTowers();
             }
         }
 
         public static void RerollTowers()
         {
-            if(Main.towerButtons == null)
+            if (towerNames.Length == 0)
             {
-                Main.towerButtons = ShopMenu.instance.towerButtons.GetComponentsInChildren<Assets.Scripts.Unity.UI_New.InGame.StoreMenu.TowerPurchaseButton>();
+                SetTowerNames();
+            }
+            if (towerButtons == null || towerButtons.Length == 0 || currentInventory != InGame.instance.GetTowerInventory())
+            {
+                towerButtons = ShopMenu.instance.towerButtons.GetComponentsInChildren<TowerPurchaseButton>();
+                currentInventory = InGame.instance.GetTowerInventory();
             }
 
-            Il2CppStringArray enabledTowers = new Il2CppStringArray(towerNames.OrderBy(x => random.Next()).Take(Math.Max(Math.Min(settings.NumberOfRandomTowers, towerNames.Length), 0)).ToArray());
+            int numberOfRandomTowers = MelonPreferences.GetEntryValue<int>(preferencesCategoryIdentifier, "NumberOfRandomTowers");
+            Il2CppStringArray enabledTowers = new Il2CppStringArray(towerNames.OrderBy(x => random.Next()).Take(Math.Max(Math.Min(numberOfRandomTowers, towerNames.Length), 0)).ToArray());
             foreach (var purchaseButton in Main.towerButtons)
             {
                 if(enabledTowers.Contains(purchaseButton.baseTowerModel.name))
@@ -81,17 +122,12 @@ namespace BTD6Randomizer
             }
         }
 
-        [HarmonyPatch(typeof(TowerInventory), "Init")]
-        public class TowerInit_Patch
+        public static void SetTowerNames()
         {
-            [HarmonyPrefix]
-            public static bool Prefix(ref Il2CppSystem.Collections.Generic.List<TowerDetailsModel> allTowersInTheGame)
+            towerNames = InGame.instance.GetGameModel().GetAllTowerDetails().ToArray().Where(x => x.name.Contains("ShopTowerDetailsModel")).Select(x => x.name.Replace("ShopTowerDetailsModel_", "")).ToArray();
+            if (towerNames.Any(x => Regex.IsMatch(x, @"(\d)(\d)(\d)")))
             {
-                Main.towerButtons = null;
-
-                Main.towerNames = allTowersInTheGame.ToArray().Where(x => x.name.Contains("ShopTowerDetailsModel")).Select(x => x.name.Replace("ShopTowerDetailsModel_", "")).ToArray();
-
-                return true;
+                towerNames = towerNames.Where(x => Regex.IsMatch(x, @"(\d)(\d)(\d)")).ToArray();
             }
         }
     }
