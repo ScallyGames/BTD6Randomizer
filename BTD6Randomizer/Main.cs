@@ -8,11 +8,11 @@ using Assets.Scripts.Unity.UI_New.InGame.StoreMenu;
 using Assets.Scripts.Simulation.Towers;
 using Assets.Scripts.Simulation.Objects;
 using Assets.Scripts.Models;
-using BloonsTD6_Mod_Helper;
-using BloonsTD6_Mod_Helper.Extensions;
 using Assets.Scripts.Unity.UI_New.InGame;
 using UnityEngine;
 using System.Text.RegularExpressions;
+using BTD_Mod_Helper;
+using BTD_Mod_Helper.Extensions;
 
 namespace BTD6Randomizer
 {
